@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,13 +26,15 @@ namespace WpfAppSQLTermekek
         private List<Termek> termekek = new List<Termek>();
         private MySqlConnection? kapcsolat;
         private MySqlDataReader? olvaso;
+        private bool engedve = false;
+        private string? parancs;
         public MainWindow()
         {
             InitializeComponent();
             AdatbazisNyitas();
             TermekekBetolteseListaba();
-            GyartokBetoltes(false);
-            KategoriaBetoltes(false);
+            GyartokBetoltes();
+            KategoriaBetoltes();
         }
 
         private void AdatbazisNyitas() {
@@ -50,7 +52,7 @@ namespace WpfAppSQLTermekek
 
         private void TermekekBetolteseListaba()
         {
-            olvaso = new MySqlCommand("select * from termékek", kapcsolat).ExecuteReader();
+            olvaso = new MySqlCommand(ParancsIro(), kapcsolat).ExecuteReader();
             while (olvaso.Read())
             {
                 termekek.Add(new Termek(olvaso.GetString("Kategória"), olvaso.GetString("Gyártó"), olvaso.GetString("Név"), Convert.ToInt32(olvaso.GetString("Ár")), Convert.ToInt32(olvaso.GetString("Garidő"))));
@@ -59,15 +61,20 @@ namespace WpfAppSQLTermekek
             dgTermekek.ItemsSource = termekek;
         }
 
-        private void KategoriaBetoltes(bool gyartoFigyelembeVetel)
+        private void KategoriaBetoltes()
         {
-            cbKategoria.Items.Clear();
-            string parancs = "select distinct kategória from termékek";
-            if (gyartoFigyelembeVetel)
+            engedve = false;
+            if (cbKategoria.SelectedIndex == 0)
+            {
+                cbKategoria.Items.Clear();
+            }
+            parancs = "select distinct kategória from termékek";
+            if (cbGyarto.SelectedIndex > 0)
             {
                 parancs = $"{parancs} where Gyártó='{cbGyarto.SelectedItem.ToString()}'";
             }
             parancs = $"{parancs} order by kategória";
+            
             olvaso = new MySqlCommand(parancs, kapcsolat).ExecuteReader();
             cbKategoria.Items.Add("- Nincs kiválasztva -");
             while (olvaso.Read())
@@ -75,17 +82,27 @@ namespace WpfAppSQLTermekek
                 cbKategoria.Items.Add(olvaso.GetString("kategória"));
             }
             olvaso.Close();
-            if (!gyartoFigyelembeVetel)
+            if (cbKategoria.SelectedIndex < 0)
             {
                 cbKategoria.SelectedIndex = 0;
             }
+            if (cbGyarto.SelectedIndex < 0)
+            {
+                cbGyarto.SelectedIndex = 0;
+            }
+            engedve = true;
+            TartalomFrissites();
         }
 
-        private void GyartokBetoltes(bool kategoriaFigyelembeVetel)
+        private void GyartokBetoltes()
         {
-            cbGyarto.Items.Clear();
-            string parancs = "select distinct gyártó from termékek";
-            if (kategoriaFigyelembeVetel)
+            engedve = false;
+            if (cbGyarto.SelectedIndex == 0)
+            {
+                cbGyarto.Items.Clear();
+            }
+            parancs = "select distinct gyártó from termékek";
+            if (cbKategoria.SelectedIndex > 0)
             {
                 parancs = $"{parancs} where Kategória='{cbKategoria.SelectedItem.ToString()}'";
             }
@@ -97,18 +114,69 @@ namespace WpfAppSQLTermekek
                 cbGyarto.Items.Add(olvaso.GetString("gyártó"));
             }
             olvaso.Close();
-            if (!kategoriaFigyelembeVetel)
+            if (cbGyarto.SelectedIndex < 0)
             {
                 cbGyarto.SelectedIndex = 0;
             }
+            if (cbKategoria.SelectedIndex < 0)
+            {
+                cbKategoria.SelectedIndex = 0;
+            }
+            engedve = true;
+            TartalomFrissites();
         }
 
-        private string SzukitettListaIras()
+        private void TartalomFrissites()
         {
-            string parancs = "select * from termékek";
-            if (cbGyarto.SelectedIndex > 0)
+            engedve = false;
+            olvaso = new MySqlCommand(ParancsIro(), kapcsolat).ExecuteReader();
+            termekek.Clear();
+            while (olvaso.Read())
             {
+                termekek.Add(new Termek(olvaso.GetString("Kategória"), olvaso.GetString("Gyártó"), olvaso.GetString("Név"), Convert.ToInt32(olvaso.GetString("Ár")), Convert.ToInt32(olvaso.GetString("Garidő"))));
+            }
+            olvaso.Close();
+            dgTermekek.Items.Refresh();
+            engedve = true;
+        }
 
+        private string ParancsIro()
+        {
+            bool voltKriterium = false;
+            parancs = "select * from termékek";
+            if (cbKategoria.SelectedIndex > 0)
+            {
+                parancs = $"{parancs} where Kategória='{cbKategoria.SelectedItem.ToString()}'";
+                voltKriterium = true;
+            }
+            if (voltKriterium)
+            {
+                if (cbGyarto.SelectedIndex > 0)
+                {
+                    parancs = $"{parancs} and Gyártó='{cbGyarto.SelectedItem.ToString()}'";
+                }
+            }
+            else
+            {
+                if (cbGyarto.SelectedIndex > 0)
+                {
+                    parancs = $"{parancs} where Gyártó='{cbGyarto.SelectedItem.ToString()}'";
+                    voltKriterium = true;
+                }
+            }
+            if (voltKriterium)
+            {
+                if (txtTermek.Text.Trim().Length > 0)
+                {
+                    parancs = $"{parancs} and Név like '%{txtTermek.Text.Trim()}%'";
+                }
+            }
+            else
+            {
+                if (txtTermek.Text.Trim().Length > 0)
+                {
+                    parancs = $"{parancs} where Név like '%{txtTermek.Text.Trim()}%'";
+                }
             }
             return parancs;
         }
@@ -124,14 +192,7 @@ namespace WpfAppSQLTermekek
 
         private void btnSzukit_Click(object sender, RoutedEventArgs e)
         {
-            olvaso = new MySqlCommand(SzukitettListaIras(), kapcsolat).ExecuteReader();
-            termekek.Clear();
-            while (olvaso.Read())
-            {
-                termekek.Add(new Termek(olvaso.GetString("Kategória"), olvaso.GetString("Gyártó"), olvaso.GetString("Név"), Convert.ToInt32(olvaso.GetString("Ár")), Convert.ToInt32(olvaso.GetString("Garidő"))));
-            }
-            olvaso.Close();
-            dgTermekek.Items.Refresh();
+            TartalomFrissites();
         }
 
         private void btnMentes_Click(object sender, RoutedEventArgs e)
@@ -150,28 +211,35 @@ namespace WpfAppSQLTermekek
             AdatbazisZaras();
         }
 
-        private void cbKategoria_Selected(object sender, RoutedEventArgs e)
+        private void cbKategoria_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (cbGyarto.SelectedIndex > 0)
+            if (engedve)
             {
-                KategoriaBetoltes(true);
-            }
-            else
-            {
-                KategoriaBetoltes(false);
+                if (cbGyarto.SelectedIndex > 0)
+                {
+                    GyartokBetoltes();
+                }
+                else
+                {
+                    GyartokBetoltes();
+                }
             }
         }
 
-        private void cbGyarto_Selected(object sender, RoutedEventArgs e)
+        private void cbGyarto_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (cbKategoria.SelectedIndex > 0)
+            if (engedve)
             {
-                GyartokBetoltes(true);
+                if (cbKategoria.SelectedIndex > 0)
+                {
+                    KategoriaBetoltes();
+                }
+                else
+                {
+                    KategoriaBetoltes();
+                }
             }
-            else
-            {
-                GyartokBetoltes(false);
-            }
+            
         }
     }
 }
